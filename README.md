@@ -15,6 +15,7 @@
 
 ```shell
   $ npm install swtc-lib  // node.js and web app
+  $ npm install swtc-lib@next  // try to keep up with jingtum-lib@2.0.0 which introduces more dependancies
   $ npm install swtc-lib@jcc   // if you need to use jcc interfaces, just note that Wallet is added to exports 
   $ npm install swtc-lib@nativescript   // mobile nativescript app, simplified one line configuration
 ```
