@@ -1,7 +1,7 @@
 {
 	"name": "swtc-lib",
-	"version": "1.6.3",
-	"description": "swtc-lib for jingtum blockchain",
+	"version": "2.0.0",
+	"description": "swtc-lib@next",
 	"main": "index.js",
 	"browser": {
 		"ws": "./src/wswrapper.js"
@@ -30,7 +30,8 @@
 		"orderbook",
 		"transaction",
 		"ledger",
-		"remote"
+		"remote",
+		"v2"
 	],
 	"author": "Lospring Liu <lospringliu@gmail.com>",
 	"license": "BSD-2-Clause",
@@ -44,8 +45,10 @@
 		"lodash": "^4.17.11",
 		"lru-cache": "^4.0.1",
 		"sha1": "^1.1.1",
-		"swtc-serializer": "^2.0.0",
-		"swtc-wallet": "^1.1.2",
+		"swtc-serializer": "^2.0.2",
+		"swtc-wallet": "^1.1.4",
+		"swtc-tum3": "^0.1.1",
+		"tum3-eth-abi": "^1.0.1",
 		"url": "^0.11.0",
 		"utf8": "^2.1.2",
 		"ws": "^1.1.1"

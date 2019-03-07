@@ -74,6 +74,28 @@ function stringToHex(s) {
     return result;
 }
 
+function string2Hex(s) {
+    var zero = '0000000000000000000000000000000000000000000000000000000000000000';
+    var result = '';
+    for (var i=0; i<s.length; i++) {
+        var b = s.charCodeAt(i);
+        result += b < 16 ? '0' + b.toString(16) : b.toString(16);
+    }
+    if(result.length < 64)
+        result += zero.substr(result.length);
+    return result;
+}
+
+function number2Hex(n) {
+    n = n.toString(16);
+    var zero = '0000000000000000000000000000000000000000000000000000000000000000';
+    return zero.substr(0, 64 - n.length) + n;
+}
+
+function hex2Number(h) {
+    return parseInt(h, 16);
+}
+
 /**
  * check {value: '', currency:'', issuer: ''}
  * @param amount
@@ -663,6 +685,9 @@ var parseKey = function (key, token) {
 module.exports = {
     hexToString: hexToString,
     stringToHex: stringToHex,
+    string2Hex: string2Hex,
+    number2Hex: number2Hex,
+    hex2Number: hex2Number,
     isValidAmount: isValidAmount,
     isValidAmount0: isValidAmount0,
     parseAmount: parseAmount,
