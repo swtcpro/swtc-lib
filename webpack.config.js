@@ -14,4 +14,10 @@ module.exports = {
 		path: path.resolve(__dirname, "dist"),
 		filename: ["swtc-lib-", ".js"].join(pkg.version)
 	},
+	resolve: {
+		extensions: [".js"],
+		alias: {
+			'jingtum-base-lib': 'swtc-wallet'
+		},
+	},
 }
