@@ -13,7 +13,9 @@ var utils = require('./utils');
 var _ = require('lodash');
 const currency = require('./config').currency;
 var bignumber = require('bignumber.js');
-
+var Tum3 = require('tum3');
+var AbiCoder = require('tum3-eth-abi').AbiCoder;
+var KeyPair = require('jingtum-base-lib').KeyPair;
 
 var LEDGER_OPTIONS = ['closed', 'header', 'current'];
 
@@ -175,11 +177,23 @@ Remote.prototype._updateServerStatus = function(data) {
     this._server._setState(online ? 'online' : 'offline');
 };
 
+function getTypes(abi, foo) {
+    return abi.filter(function (json) {
+        return json.name === foo
+    }).map(function (json) {
+        return json.outputs.map(function (input) {
+            return input.type;
+        });
+    }).map(function (types) {
+        return types;
+    })[0] || '';
+}
 /**
  * handle response by every websocket request
  * @param data
  * @private
  */
+
 Remote.prototype._handleResponse = function(data) {
     var req_id = data.id;
     if (typeof req_id !== 'number'
@@ -197,9 +211,62 @@ Remote.prototype._handleResponse = function(data) {
         this._updateServerStatus(data.result);
     }
 
+    var self = this;
     // return to callback
     if (data.status === 'success') {
         var result = request.filter(data.result);
+        if(result.ContractState && result.tx_json.TransactionType === 'AlethContract' && result.tx_json.Method === 1){//调用合约时，如果是获取变量，则转换一下
+            var abi = new AbiCoder();
+            var types = getTypes(self.abi, self.fun);
+            result.ContractState = abi.decodeParameters(types, result.ContractState);
+            types.forEach(function (type, i) {
+                if(type === 'address') {
+                    var adr = result.ContractState[i].slice(2);
+                    var buf = new Buffer(20);
+                    buf.write(adr, 0, 'hex');
+                    result.ContractState[i] = KeyPair.__encode(0,  buf)
+                }
+            });
+
+        }
+        if(result.AlethLog){
+            var logValue = [];
+            var item = {address: '', data: {}};
+            var logs = result.AlethLog;
+            logs.forEach(function (log) {
+                var _log = JSON.parse(log.item);
+                var _adr = _log.address.slice(2);
+                var buf = new Buffer(20);
+                buf.write(_adr, 0, 'hex');
+                item.address = KeyPair.__encode(0,  buf);
+
+                var abi = new AbiCoder();
+                self.abi.filter(function (json) { return json.type === 'event' })
+                    .map(function (json)
+                    {
+                        var types =  json.inputs.map(function (input) {
+                            return input.type;
+                        });
+                        var foo = json.name + '(' + types.join(',')  + ')';
+                        if(abi.encodeEventSignature(foo) === _log.topics[0]){
+                            var data = abi.decodeLog(json.inputs, _log.data, _log.topics);
+                            json.inputs.forEach(function (input, i) {
+                                if(input.type === 'address'){
+                                    var _adr = data[i].slice(2);
+                                    var buf = new Buffer(20);
+                                    buf.write(_adr, 0, 'hex');
+                                    item.data[i] = KeyPair.__encode(0,  buf);
+                                }else {
+                                    item.data[i] = data[i];
+                                }
+                            });
+                        }
+                    });
+
+                logValue.push(item);
+            });
+            result.AlethLog = logValue;
+        }
         request.callback(null, result);
     } else if (data.status === 'error') {
         request.callback(data.error_message || data.error_exception);
@@ -425,7 +492,7 @@ Remote.prototype.__requestAccount = function(type, options, request, filter) {
     }
     request.selectLedger(ledger);
 
-    if (utils.isValidAddress(peer)) {
+    if (peer && utils.isValidAddress(peer)) {
         request.message.peer = peer;
     }
     if (Number(limit)) {
@@ -817,6 +884,142 @@ Remote.prototype.buildPaymentTx = function(options) {
     return tx
 };
 
+Remote.prototype.initContract = function(options) {
+    var tx = new Transaction(this);
+    if (typeof options !== 'object') {
+        tx.tx_json.obj = new Error('invalid options type');
+        return tx;
+    }
+    var account = options.account;
+    var amount = options.amount;
+    var payload = options.payload;
+    var params = options.params || [];
+    var abi = options.abi;
+    if (!utils.isValidAddress(account)) {
+        tx.tx_json.account = new Error('invalid address');
+        return tx;
+    }
+    if (isNaN(amount)) {
+        tx.tx_json.amount = new Error('invalid amount');
+        return tx;
+    }
+    if(typeof payload !== 'string'){
+        tx.tx_json.payload = new Error('invalid payload: type error.');
+        return tx;
+    }
+    if (!Array.isArray(params)) {
+        tx.tx_json.params =  new Error('invalid params: type error.');
+        return tx;
+    }
+    if (!abi) {
+        tx.tx_json.abi =  new Error('not found abi');
+        return tx;
+    }
+    if (!Array.isArray(abi)) {
+        tx.tx_json.params =  new Error('invalid abi: type error.');
+        return tx;
+    }
+
+    var tum3 = new Tum3();
+    tum3.mc.defaultAccount = account;
+    var MyContract = tum3.mc.contract(abi);
+    var contractData = MyContract.new.getData.apply(null, params.concat({data: payload}));
+
+    tx.tx_json.TransactionType = 'AlethContract';
+    tx.tx_json.Account = account;
+    tx.tx_json.Amount = Number(amount) * 1000000;
+    tx.tx_json.Method = 0;
+    tx.tx_json.Payload = utils.stringToHex(contractData);
+    return tx
+};
+
+Remote.prototype.invokeContract = function(options) {
+    var tx = new Transaction(this);
+    if (typeof options !== 'object') {
+        tx.tx_json.obj =  new Error('invalid options type');
+        return tx;
+    }
+    var account = options.account;
+    var des = options.destination;
+    var func = options.func; //函数名及函数参数
+    var abi = options.abi;
+
+    if (!utils.isValidAddress(account)) {
+        tx.tx_json.account = new Error('invalid address');
+        return tx;
+    }
+    if (!utils.isValidAddress(des)) {
+        tx.tx_json.des = new Error('invalid destination');
+        return tx;
+    }
+    if(typeof func !== 'string' || func.indexOf('(') < 0  || func.indexOf(')') < 0){
+        tx.tx_json.func =  new Error('invalid func, func must be string');
+        return tx;
+    }
+    if (!abi) {
+        tx.tx_json.abi =  new Error('not found abi');
+        return tx;
+    }
+    if (!Array.isArray(abi)) {
+        tx.tx_json.params =  new Error('invalid abi: type error.');
+        return tx;
+    }
+    this.fun = func.substring(0, func.indexOf('('));
+
+    var tum3 = new Tum3();
+    tum3.mc.defaultAccount = account;
+    var MyContract = tum3.mc.contract(abi);
+    this.abi = abi;
+    var myContractInstance = MyContract.at(des);// initiate contract for an address
+    // try {
+        var result = eval('myContractInstance.' + func);// call constant function
+    // }catch (e){
+    //     tx.tx_json.foo = new Error('invalid foo, not found this function.' + e);
+    //     return tx;
+    // }
+
+    if(!result){
+        console.log('result: ', result);
+        tx.tx_json.des = new Error('invalid func, no result');
+        return tx;
+    }
+    tx.tx_json.TransactionType = 'AlethContract';
+    tx.tx_json.Account = account;
+    tx.tx_json.Method = 1;
+    tx.tx_json.Destination = des;
+    tx.tx_json.Args = [];
+    tx.tx_json.Args.push({Arg: {Parameter: utils.stringToHex(result.substr(2,result.length)), ContractParamsType:0}});
+    return tx;
+};
+
+Remote.prototype.AlethEvent = function(options) {
+    var request =  new Request(this, 'aleth_eventlog', function(data) {
+        return data;
+    });
+
+    if (typeof options !== 'object') {
+        request.message.obj =  new Error('invalid options type');
+        return request;
+    }
+    var des = options.destination;
+    var abi = options.abi;
+
+    if (!utils.isValidAddress(des)) {
+        request.message.des = new Error('invalid destination');
+        return request;
+    }
+    if (!abi) {
+        request.message.abi =  new Error('not found abi');
+        return request;
+    }
+    if (!Array.isArray(abi)) {
+        request.message.params =  new Error('invalid abi: type error.');
+        return request;
+    }
+    this.abi = abi;
+    request.message.Destination = des;
+    return request;
+};
 /**
  * contract
  * @param options
