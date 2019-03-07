@@ -13,7 +13,7 @@ var utils = require('./utils');
 var _ = require('lodash');
 const currency = require('./config').currency;
 var bignumber = require('bignumber.js');
-var Tum3 = require('tum3');
+var Tum3 = require('swtc-tum3');
 var AbiCoder = require('tum3-eth-abi').AbiCoder;
 var KeyPair = require('jingtum-base-lib').KeyPair;
 
