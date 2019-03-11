@@ -13,7 +13,7 @@
 
 **Via npm for Node.js**
 
-```shell
+```bash
   $ npm install swtc-lib  // node.js and web app
   $ npm install swtc-lib@next  // try to keep up with jingtum-lib@2.0.0 which introduces more dependancies
   $ npm install swtc-lib@jcc   // if you need to use jcc interfaces, just note that Wallet is added to exports 
@@ -35,7 +35,7 @@ import { Wallet, Remote } from 'swtc-lib' // esm import
 
 **Build from the source and test**
 
-```shell
+```bash
   $ git clone https://github.com/swtcca/swtc-lib.git
   $ cd swtc-lib; npm install
   $ npm run build or npm run build:production (optional for static browser)
