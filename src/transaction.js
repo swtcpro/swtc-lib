@@ -2,7 +2,6 @@
 var util = require('util');
 var Event = require('events').EventEmitter;
 var utf8 = require('utf8');
-const utils = require('./utils');
 var baselib = require('swtc-wallet').Wallet;
 const fee = require('./config').fee || 10000;
 /**
@@ -368,7 +367,7 @@ Transaction.prototype.submit = function(callback) {
     } else if(self._remote._local_sign){//签名之后传给底层
         self.sign(function (err, blob) {
             if(err){
-                return callback('sign error: ' + err);
+                return callback('sign error: ' + err + "blob: " + blob);
             }else{
                 var data = {
                     tx_blob: self.tx_json.blob

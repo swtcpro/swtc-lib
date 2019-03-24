@@ -117,6 +117,7 @@ Server.prototype._handleClose = function () {
                 clearInterval(self._timer);
                 self._timer = 0;
                 self._remote.emit('reconnect');
+				ret
             }
         });
     }, 3000);

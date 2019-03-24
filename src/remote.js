@@ -18,7 +18,7 @@ var AbiCoder = require('tum3-eth-abi').AbiCoder;
 var KeyPair = require('swtc-keypairs').KeyPair;
 
 
-var LEDGER_OPTIONS = ['closed', 'header', 'current'];
+//var LEDGER_OPTIONS = ['closed', 'header', 'current'];
 
 /**
  * main handler for backend system
@@ -510,7 +510,6 @@ function getRelationType(type) {
 Remote.prototype.__requestAccount = function(type, options, request) {
     // var request = new Request(this, type, filter);
     request._command = type;
-    var self = this
     var account = options.account;
     var ledger = options.ledger;
     var peer = options.peer;
@@ -965,9 +964,9 @@ Remote.prototype.invokeContract = function(options) {
 
     var tum3 = new Tum3();
     tum3.mc.defaultAccount = account;
-    var MyContract = tum3.mc.contract(abi);
+    //var MyContract = tum3.mc.contract(abi);
     this.abi = abi;
-    var myContractInstance = MyContract.at(des);// initiate contract for an address
+    //var myContractInstance = MyContract.at(des);// initiate contract for an address
     // try {
         var result = eval('myContractInstance.' + func);// call constant function
     // }catch (e){
@@ -976,7 +975,7 @@ Remote.prototype.invokeContract = function(options) {
     // }
 
     if(!result){
-        console.log('result: ', result);
+        //console.log('result: ', result);
         tx.tx_json.des = new Error('invalid func, no result');
         return tx;
     }

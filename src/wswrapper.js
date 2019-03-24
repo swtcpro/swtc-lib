@@ -6,6 +6,8 @@ const events_1 = require("events");
  */
 class WSWrapper extends events_1.EventEmitter {
     constructor(url, _protocols, _websocketOptions) {
+		_protocols
+		_websocketOptions
         super();
         this.setMaxListeners(Infinity);
         this._ws = new WebSocket(url);

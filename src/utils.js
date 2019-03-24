@@ -3,9 +3,7 @@
  */
 var extend = require('extend');
 var baselib = require('swtc-wallet').Wallet;
-var Transaction = require('./transaction');
 var _extend = require('lodash/extend');
-var _isEmpty = require('lodash/isEmpty');
 var _ = require('lodash');
 var utf8 = require('utf8');
 var config = require('./config');
@@ -107,7 +105,7 @@ function isValidAmount(amount) {
     }
     // check amount value
     if ((!amount.value && amount.value !== 0)
-            || Number(amount.value) === NaN) {
+            || Number.isNaN(Number(amount.value))) {
         return false;
     }
     // check amount currency
@@ -158,7 +156,7 @@ function isValidAmount0(amount) {
  * @returns {*}
  */
 function parseAmount(amount) {
-    if (typeof amount === 'string' && Number(amount) !== NaN) {
+    if (typeof amount === 'string' && !Number.isNaN(Number(amount))) {
         var value = String(new bignumber(amount).dividedBy(1000000.0));
         return {value: value, currency: currency, issuer: ''};
     } else if (typeof amount === 'object' && isValidAmount(amount)) {
