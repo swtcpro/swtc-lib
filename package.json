@@ -1,6 +1,6 @@
 {
   "name": "swtc-lib",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "swtc-lib@next",
   "main": "index.js",
   "browser": {
@@ -56,8 +56,8 @@
     "lodash": "^4.17.11",
     "lru-cache": "^4.0.1",
     "sha1": "^1.1.1",
-    "swtc-serializer": "^2.0.2",
-    "swtc-wallet": "^1.1.4",
+    "swtc-serializer": "^2.0.6",
+    "swtc-wallet": "^1.1.7",
     "swtc-tum3": "^0.1.1",
     "tum3-eth-abi": "^1.0.1",
     "url": "^0.11.0",
