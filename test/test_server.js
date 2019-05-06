@@ -1,11 +1,13 @@
 const chai = require("chai")
 const expect = chai.expect
-const Server = require("../src/server")
-const Remote = require("../src/remote")
+// const Server = require("../src/server")
+const Server = require("../src/server").Server
+const Remote = require("../").Remote
 const config = require("./config")
 const sinon = require("sinon")
 const url = require("url")
 const WS = require("ws")
+const sleep = time => new Promise(res => setTimeout(() => res(), time))
 let { JT_NODE, TEST_NODE } = config
 
 describe("test server", function() {
@@ -290,7 +292,8 @@ describe("test server", function() {
   })
 
   describe("test connect", function() {
-    it("if had connected", function() {
+    this.timeout(5000)
+    it("if had connected", async function(done) {
       let remote = new Remote({
         server: JT_NODE,
         local_sign: true
@@ -303,7 +306,10 @@ describe("test server", function() {
       server.connect()
       expect(spy.callCount).to.equal(0)
       expect(spy1.callCount).to.equal(0)
-      server.disconnect()
+      new Promise(resolve => {
+        setTimeout(() => resolve(server.disconnect()), 500)
+      })
+      done()
     })
 
     it("throw error if create WS instance", function(done) {
