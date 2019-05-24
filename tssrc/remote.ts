@@ -1,3 +1,4 @@
+import { Wallet } from "swtc-wallet"
 import { Account } from "./account"
 import { EventEmitter } from "events"
 import { OrderBook } from "./orderbook"
@@ -19,6 +20,8 @@ function getRelationType(type) {
       return 1
     case "freeze":
       return 3
+    default:
+      return null
   }
 }
 
@@ -34,19 +37,41 @@ function getRelationType(type) {
  * @constructor
  */
 class Remote extends EventEmitter {
+  public static Wallet = Wallet
+  public static Account = Account
+  public static OrderBook = OrderBook
+  public static Transaction = Transaction
+  public static utils = utils
   public type
-  protected _local_sign
-  protected _token
+  public abi?
+  public fun?
+  public readonly AbiCoder: any = null
+  public readonly Tum3: any = null
+  public readonly _token
+  public readonly _local_sign
+  protected _issuer
   private _url
   private _server
   private _status
   private _requests
   private _cache
   private _paths
+  private _solidity: boolean = false
   constructor(options) {
     super()
     const _opts = options || {}
     this._local_sign = true
+    if (_opts.solidity) {
+      this._solidity = true
+      try {
+        this.AbiCoder = require("tum3-eth-abi").AbiCoder
+        this.Tum3 = require("swtc-tum3")
+      } catch (error) {
+        throw Error(
+          "install tum3-eth-abi and swtc-tum3 to enable solidity support"
+        )
+      }
+    }
     if (typeof _opts.server !== "string") {
       this.type = new TypeError("server config not supplied")
       return this
@@ -57,7 +82,11 @@ class Remote extends EventEmitter {
       ledger_index: 0
     }
     this._requests = {}
-    this._token = options.token || "swt"
+    this._token = options.token || Wallet.token || "swt"
+    this._issuer =
+      options.issuer ||
+      Wallet.config.issuer ||
+      "jGa9J9TkqtBcUoHe2zqhVFFbgUVED6o9or"
     this._cache = LRU({
       max: 100,
       maxAge: 1000 * 60 * 5
@@ -93,8 +122,18 @@ class Remote extends EventEmitter {
     return {
       _local_sign: this._local_sign,
       _server: this._server,
-      _token: this._token
+      _token: this._token,
+      _issuer: this._issuer,
+      _solidity: this._solidity
     }
+  }
+
+  // makeCurrency and makeAmount
+  public makeCurrency(currency = this._token, issuer = this._issuer) {
+    return Wallet.makeCurrency(currency, issuer)
+  }
+  public makeAmount(value = 1, currency = this._token, issuer = this._issuer) {
+    return Wallet.makeAmount(value, currency, issuer)
   }
 
   /**
@@ -292,7 +331,12 @@ class Remote extends EventEmitter {
       request.message.type = new Error("invalid options type")
       return request
     }
-    if (Number(options.ledger_index)) {
+    if (options.ledger_index && !/^[1-9]\d{0,9}$/.test(options.ledger_index)) {
+      // 支持0-10位数字查询
+      request.message.ledger_index = new Error("invalid ledger_index")
+      return request
+    }
+    if (options.ledger_index) {
       request.message.ledger_index = Number(options.ledger_index)
     }
     if (utils.isValidHash(options.ledger_hash)) {
@@ -317,7 +361,32 @@ class Remote extends EventEmitter {
       request.message.accounts = options.accounts
       filter = false
     }
+    return request
+  }
 
+  /*
+   * get all accounts at some ledger_index
+   */
+  public requestAccounts = function(options) {
+    const request = new Request(this, "account_count")
+    if (options === null || typeof options !== "object") {
+      request.message.type = new Error("invalid options type")
+      return request
+    }
+    if (options.ledger_index && !/^[1-9]\d{0,9}$/.test(options.ledger_index)) {
+      // 支持0-10位数字查询
+      request.message.ledger_index = new Error("invalid ledger_index")
+      return request
+    }
+    if (options.ledger_index) {
+      request.message.ledger_index = Number(options.ledger_index)
+    }
+    if (utils.isValidHash(options.ledger_hash)) {
+      request.message.ledger_hash = options.ledger_hash
+    }
+    if (options.marker) {
+      request.message.marker = options.marker
+    }
     return request
   }
 
@@ -645,6 +714,38 @@ class Remote extends EventEmitter {
     return Transaction.buildPaymentTx(options, this)
   }
 
+  public initContract(options) {
+    return Transaction.initContractTx(options, this)
+  }
+  public invokeContract(options) {
+    return Transaction.invokeContractTx(options, this)
+  }
+  public AlethEvent = function(options) {
+    const request = new Request(this, "aleth_eventlog", data => data)
+    if (typeof options !== "object") {
+      request.message.obj = new Error("invalid options type")
+      return request
+    }
+    const des = options.destination
+    const abi = options.abi
+
+    if (!utils.isValidAddress(des)) {
+      request.message.des = new Error("invalid destination")
+      return request
+    }
+    if (!abi) {
+      request.message.abi = new Error("not found abi")
+      return request
+    }
+    if (!Array.isArray(abi)) {
+      request.message.params = new Error("invalid abi: type error.")
+      return request
+    }
+    this.abi = abi
+    request.message.Destination = des
+    return request
+  }
+
   /**
    * contract
    * @param options
@@ -847,15 +948,86 @@ class Remote extends EventEmitter {
       this._updateServerStatus(data.result)
     }
 
-    // return to callback
-    if (data.status === "success") {
-      const result = request.filter(data.result)
-      if (request) {
-        request.callback(null, result)
+    const self = this
+    if (this._solidity) {
+      // return to callback
+      if (data.status === "success") {
+        const result = request.filter(data.result)
+        if (
+          result.ContractState &&
+          result.tx_json.TransactionType === "AlethContract" &&
+          result.tx_json.Method === 1
+        ) {
+          // 调用合约时，如果是获取变量，则转换一下
+          const abi = new this.AbiCoder()
+          const types = utils.getTypes(self.abi, self.fun)
+          result.ContractState = abi.decodeParameters(
+            types,
+            result.ContractState
+          )
+          types.forEach((type, i) => {
+            if (type === "address") {
+              const adr = result.ContractState[i].slice(2)
+              const buf = new Buffer(20)
+              buf.write(adr, 0, "hex")
+              result.ContractState[i] = Wallet.KeyPair.__encode(buf)
+            }
+          })
+        }
+        if (result.AlethLog) {
+          const logValue = []
+          const item = { address: "", data: {} }
+          const logs = result.AlethLog
+          logs.forEach(log => {
+            const _log = JSON.parse(log.item)
+            const _adr = _log.address.slice(2)
+            const buf = new Buffer(20)
+            buf.write(_adr, 0, "hex")
+            item.address = Wallet.KeyPair.__encode(buf)
+
+            const abi = new this.AbiCoder()
+            self.abi
+              .filter(json => {
+                return json.type === "event"
+              })
+              .map(json => {
+                const types = json.inputs.map(input => {
+                  return input.type
+                })
+                const foo = json.name + "(" + types.join(",") + ")"
+                if (abi.encodeEventSignature(foo) === _log.topics[0]) {
+                  const data2 = abi.decodeLog(
+                    json.inputs,
+                    _log.data,
+                    _log.topics
+                  )
+                  json.inputs.forEach((input, i) => {
+                    if (input.type === "address") {
+                      const _adr2 = data2[i].slice(2)
+                      const buf2 = new Buffer(20)
+                      buf2.write(_adr2, 0, "hex")
+                      item.data[i] = Wallet.KeyPair.__encode(buf2)
+                    } else {
+                      item.data[i] = data2[i]
+                    }
+                  })
+                }
+              })
+
+            logValue.push(item)
+          })
+          result.AlethLog = logValue
+        }
+        request && request.callback(null, result)
+      } else if (data.status === "error") {
+        request && request.callback(data.error_message || data.error_exception)
       }
-    } else if (data.status === "error") {
-      if (request) {
-        request.callback(data.error_exception || data.error_message)
+    } else {
+      if (data.status === "success") {
+        const result = request.filter(data.result)
+        request && request.callback(null, result)
+      } else if (data.status === "error") {
+        request && request.callback(data.error_message || data.error_exception)
       }
     }
   }
@@ -912,7 +1084,7 @@ class Remote extends EventEmitter {
     }
     request.selectLedger(ledger)
 
-    if (utils.isValidAddress(peer)) {
+    if (peer && utils.isValidAddress(peer)) {
       request.message.peer = peer
     }
     if (Number(limit)) {
